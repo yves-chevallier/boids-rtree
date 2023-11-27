@@ -14,6 +14,8 @@
 #include <iomanip>
 #include <span>
 
+#define SHOW_GRID
+
 #define WINDOW_WIDTH 1000
 #define WINDOW_HEIGHT 1000
 
@@ -37,7 +39,6 @@ template<size_t WIDTH, size_t HEIGHT, size_t BINS, size_t BIN_SIZE>
 class BinLattice {
 public:
     static constexpr size_t MaxQuerySize = BIN_SIZE * 9;
-    //using Bin = std::span<Boid*, BIN_SIZE>;
     using Bin = std::pair<std::array<Boid*, BIN_SIZE>, size_t>;
     using Lattice = std::array<std::array<Bin, BINS>, BINS>;
     using BoidArray = std::array<Boid*, MaxQuerySize>;
@@ -96,32 +97,26 @@ public:
 
 int main() {
     std::vector<Boid> boids;
+    using Lattice = BinLattice<WINDOW_WIDTH, WINDOW_HEIGHT, NUMBER_BINS, MAX_BOIDS_PER_BIN>;
     for (int i = 0; i < BOIDS; ++i) {
-        boids.push_back({{rand() % WINDOW_WIDTH, rand() % WINDOW_HEIGHT}});
+        boids.push_back({{
+            static_cast<float>(rand() % WINDOW_WIDTH),
+            static_cast<float>(rand() % WINDOW_HEIGHT)}});
     }
-    BinLattice<WINDOW_WIDTH, WINDOW_HEIGHT, NUMBER_BINS, MAX_BOIDS_PER_BIN> binLattice;
-    BinLattice<WINDOW_WIDTH, WINDOW_HEIGHT, NUMBER_BINS, MAX_BOIDS_PER_BIN>::QueryResult result;
+    Lattice binLattice;
+    Lattice::QueryResult result;
 
     sf::RenderWindow window(sf::VideoMode(1000, 1000), "Boids");
-    sf::CircleShape shape(1.f);
-    shape.setFillColor(sf::Color::Green);
-
-    // Fill bin lattice
-    for (auto& boid : boids) binLattice.addBoid(&boid);
 
     // Print to stdout for debugging the lattice structure
     for (auto& row : binLattice.lattice) {
-        for (auto& bin : row) {
-            std::cout << bin.second << " ";
-        }
+        for (auto& bin : row) std::cout << bin.second << " ";
         std::cout << std::endl;
     }
 
     // Load a font
     sf::Font font;
-    if (!font.loadFromFile("collegiate.ttf")) {
-        std::cout << "Error loading font" << std::endl;
-    }
+    if (!font.loadFromFile("collegiate.ttf")) std::cout << "Error loading font" << std::endl;
 
     // Setup text
     sf::Text text;
@@ -129,6 +124,25 @@ int main() {
     text.setCharacterSize(24);
     text.setFillColor(sf::Color::White);
     text.setPosition(10.f, 10.f);
+
+    // Grid lines
+    sf::RectangleShape hline(sf::Vector2f(WINDOW_WIDTH / NUMBER_BINS, 1.f));
+    sf::RectangleShape vline(sf::Vector2f(1.f, WINDOW_HEIGHT / NUMBER_BINS));
+    hline.setFillColor(sf::Color(255, 255, 255, 35));
+    vline.setFillColor(sf::Color(255, 255, 255, 35));
+
+    // Mouse circle
+    sf::CircleShape spotlight(1.f);
+    spotlight.setFillColor(sf::Color(255, 255, 255, 35));
+    spotlight.setRadius(RADIUS);
+
+    // Boid circle
+    sf::CircleShape boidShape(1.f);
+    boidShape.setFillColor(sf::Color::Cyan);
+
+    // Highlight circle
+    sf::CircleShape boidSeen(2.f);
+    boidSeen.setFillColor(sf::Color::Yellow);
 
     sf::Clock frameClock; // Clock to measure frame time
     sf::Clock updateClock; // Clock to measure update intervals
@@ -143,11 +157,9 @@ int main() {
         window.clear();
 
         // Display lattice grid with clear gray lines
-        #ifdef DEBUG
-        sf::RectangleShape hline(sf::Vector2f(WINDOW_WIDTH / NUMBER_BINS, 1.f));
-        hline.setFillColor(sf::Color(255, 255, 255, 35));
-        sf::RectangleShape vline(sf::Vector2f(1.f, WINDOW_HEIGHT / NUMBER_BINS));
-        vline.setFillColor(sf::Color(255, 255, 255, 35));
+        #ifdef SHOW_GRID
+
+
         for (size_t i = 0; i < NUMBER_BINS; ++i) {
             for (size_t j = 0; j < NUMBER_BINS; ++j) {
                 hline.setPosition(i * WINDOW_WIDTH / NUMBER_BINS, j * WINDOW_HEIGHT / NUMBER_BINS);
@@ -163,34 +175,32 @@ int main() {
         sf::Vector2f mousePositionFloat = sf::Vector2f(mousePosition.x, mousePosition.y);
 
         // Draw clear alpha circle around mouse
-        shape.setFillColor(sf::Color(255, 255, 255, 35));
-        shape.setRadius(RADIUS);
-        shape.setPosition(mousePositionFloat.x - RADIUS, mousePositionFloat.y - RADIUS);
-        window.draw(shape);
+        spotlight.setPosition(mousePositionFloat.x - RADIUS, mousePositionFloat.y - RADIUS);
+        window.draw(spotlight);
 
-        shape.setFillColor(sf::Color::Cyan);
-        shape.setRadius(1.f);
         for (auto& boid : boids) {
-            shape.setPosition(boid.position);
-            window.draw(shape);
+            boidShape.setPosition(boid.position);
+            window.draw(boidShape);
         }
 
-        shape.setFillColor(sf::Color::Yellow);
-        shape.setRadius(2.f);
+        binLattice.clear();
+        for (auto& boid : boids) binLattice.addBoid(&boid);
 
-        #if 0 // For each boid (real usecase), very slow < 10 FPS
+        #if 1 // For each boid (real usecase), very slow < 10 FPS
+        // *********** SLOW ***********
         for (auto& boid : boids) {
             binLattice.query(mousePositionFloat, result, RADIUS);
             for (size_t i = 0; i < result.second; ++i) {
-                shape.setPosition(result.first[i]->position);
-                window.draw(shape);
+                boidSeen.setPosition(result.first[i]->position);
+                window.draw(boidSeen);
             }
         }
+        // *********** /SLOW ***********
         #else // Only for mouse position (for profiling): very fast > 120 FPS
         binLattice.query(mousePositionFloat, result, RADIUS);
         for (size_t i = 0; i < result.second; ++i) {
-            shape.setPosition(result.first[i]->position);
-            window.draw(shape);
+            boidSeen.setPosition(result.first[i]->position);
+            window.draw(boidSeen);
         }
         #endif
 
