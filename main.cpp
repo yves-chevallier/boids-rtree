@@ -70,6 +70,7 @@ public:
 
     void query(sf::Vector2f &position, QueryResult& result, float radius) {
         size_t count = 0;
+        float radiusSquared = radius * radius; // Precompute squared radius
 
         size_t xIndex = static_cast<size_t>(position.x / (WIDTH / BINS));
         size_t yIndex = static_cast<size_t>(position.y / (HEIGHT / BINS));
@@ -80,10 +81,11 @@ public:
                 size_t newX = std::clamp(xIndex + dx, 0ul, BINS - 1);
                 size_t newY = std::clamp(yIndex + dy, 0ul, BINS - 1);
                 auto& bin = lattice[newX][newY];
+
                 for (size_t i = 0; i < bin.second; ++i) {
-                    // Check if boid is within radius
-                    if (std::hypot(bin.first[i]->position.x - position.x,
-                                   bin.first[i]->position.y - position.y) < radius) {
+                    float distX = bin.first[i]->position.x - position.x;
+                    float distY = bin.first[i]->position.y - position.y;
+                    if ((distX * distX + distY * distY) < radiusSquared) {
                         result.first[count++] = bin.first[i];
                     }
                 }
@@ -107,12 +109,6 @@ int main() {
     Lattice::QueryResult result;
 
     sf::RenderWindow window(sf::VideoMode(1000, 1000), "Boids");
-
-    // Print to stdout for debugging the lattice structure
-    for (auto& row : binLattice.lattice) {
-        for (auto& bin : row) std::cout << bin.second << " ";
-        std::cout << std::endl;
-    }
 
     // Load a font
     sf::Font font;
