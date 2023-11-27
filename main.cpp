@@ -7,125 +7,64 @@
  * Goal is to have a 60 FPS simulation with 10000 boids.
  */
 #include <SFML/Graphics.hpp>
-#include <cmath>
-#include <array>
 #include <iostream>
 #include <sstream>
-#include <iomanip>
-#include <span>
+#include <boost/geometry.hpp>
+#include <boost/geometry/geometries/point_xy.hpp>
+#include <boost/geometry/index/rtree.hpp>
 
-#define SHOW_GRID
+namespace bg = boost::geometry;
+namespace bgi = boost::geometry::index;
+
+using point_2d = bg::model::d2::point_xy<float>;
+using box = bg::model::box<point_2d>;
 
 #define WINDOW_WIDTH 1000
 #define WINDOW_HEIGHT 1000
 
-#define NUMBER_BINS 20 // Number of bins should be proportional to sight radius
-#define MAX_BOIDS_PER_BIN 100 // Limit number of boids per bin to avoid large queries
-
-#define BOIDS 1000 // To be increased to 10000
-#define RADIUS 100 // Radius of the circle around the mouse to query for neighbors
+#define BOIDS 10000
+#define RADIUS 50 // Radius of the circle around the mouse to query for neighbors
 
 struct Boid {
-    sf::Vector2f position;
+    point_2d position;
+    struct ByPos {
+        using result_type = point_2d;
+        result_type const& operator()(Boid const& boid) const { return boid.position; }
+    };
+    auto toVec2() const { return sf::Vector2f(position.x(), position.y()); }
 };
 
-/**
- * In this implementation I am using a fixed size array for the boids in each bin.
- * std::vector is not used because it is slower. I am seeking to optimize the
- * neighbor search, so I am not concerned with the memory overhead of a fixed size
- * array.
- */
-template<size_t WIDTH, size_t HEIGHT, size_t BINS, size_t BIN_SIZE>
-class BinLattice {
-public:
-    static constexpr size_t MaxQuerySize = BIN_SIZE * 9;
-    using Bin = std::pair<std::array<Boid*, BIN_SIZE>, size_t>;
-    using Lattice = std::array<std::array<Bin, BINS>, BINS>;
-    using BoidArray = std::array<Boid*, MaxQuerySize>;
-    using QueryResult = std::pair<BoidArray, size_t>;  // Pair of array and count
-
-    BinLattice() {
-        for (auto &row : lattice) {
-            for (auto &bin : row) {
-                bin.first.fill(nullptr);
-                bin.second = 0;
-            }
-        }
-    }
-
-    void addBoid(Boid* boid) {
-        size_t xIndex = static_cast<size_t>(boid->position.x / (WIDTH / BINS));
-        size_t yIndex = static_cast<size_t>(boid->position.y / (HEIGHT / BINS));
-        auto& bin = lattice[xIndex][yIndex];
-        bin.first[bin.second++] = boid;
-    }
-
-    void clear() {
-        for (auto &row : lattice) {
-            for (auto &bin : row) {
-                bin.second = 0;
-            }
-        }
-    }
-
-    void query(sf::Vector2f &position, QueryResult& result, float radius) {
-        size_t count = 0;
-        float radiusSquared = radius * radius; // Precompute squared radius
-
-        size_t xIndex = static_cast<size_t>(position.x / (WIDTH / BINS));
-        size_t yIndex = static_cast<size_t>(position.y / (HEIGHT / BINS));
-
-        // Query all bins in a 3x3 square around the boid
-        for (int dx = -1; dx <= 1; ++dx) {
-            for (int dy = -1; dy <= 1; ++dy) {
-                size_t newX = std::clamp(xIndex + dx, 0ul, BINS - 1);
-                size_t newY = std::clamp(yIndex + dy, 0ul, BINS - 1);
-                auto& bin = lattice[newX][newY];
-
-                for (size_t i = 0; i < bin.second; ++i) {
-                    float distX = bin.first[i]->position.x - position.x;
-                    float distY = bin.first[i]->position.y - position.y;
-                    if ((distX * distX + distY * distY) < radiusSquared) {
-                        result.first[count++] = bin.first[i];
-                    }
-                }
-            }
-        }
-        result.second = count;
-    }
-
-    Lattice lattice;
-};
+auto intersecting(auto const& search, auto const& tree, float radius) {
+    std::vector<std::reference_wrapper<Boid const>> result;
+    tree.query(bgi::satisfies([&](auto const& boid) {
+                   return bg::distance(boid.position, search) < radius ;
+               }),
+               std::back_inserter(result));
+    return result;
+}
 
 int main() {
-    std::vector<Boid> boids;
-    using Lattice = BinLattice<WINDOW_WIDTH, WINDOW_HEIGHT, NUMBER_BINS, MAX_BOIDS_PER_BIN>;
-    for (int i = 0; i < BOIDS; ++i) {
-        boids.push_back({{
-            static_cast<float>(rand() % WINDOW_WIDTH),
-            static_cast<float>(rand() % WINDOW_HEIGHT)}});
-    }
-    Lattice binLattice;
-    Lattice::QueryResult result;
+    sf::ContextSettings settings;
+    settings.antialiasingLevel = 4.0;
+    sf::RenderWindow window(sf::VideoMode(1000, 1000), "Boids", sf::Style::Close, settings);
 
-    sf::RenderWindow window(sf::VideoMode(1000, 1000), "Boids");
+    bgi::rtree<Boid, bgi::quadratic<32>, Boid::ByPos> rtree;
+
+    for (int i = 0; i < BOIDS; ++i) {
+        const auto x = static_cast<float>(rand() % WINDOW_WIDTH);
+        const auto y = static_cast<float>(rand() % WINDOW_HEIGHT);
+        rtree.insert({{x, y}});
+    }
 
     // Load a font
     sf::Font font;
     if (!font.loadFromFile("collegiate.ttf")) std::cout << "Error loading font" << std::endl;
 
     // Setup text
-    sf::Text text;
-    text.setFont(font);
+    sf::Text text("", font);
     text.setCharacterSize(24);
     text.setFillColor(sf::Color::White);
     text.setPosition(10.f, 10.f);
-
-    // Grid lines
-    sf::RectangleShape hline(sf::Vector2f(WINDOW_WIDTH / NUMBER_BINS, 1.f));
-    sf::RectangleShape vline(sf::Vector2f(1.f, WINDOW_HEIGHT / NUMBER_BINS));
-    hline.setFillColor(sf::Color(255, 255, 255, 35));
-    vline.setFillColor(sf::Color(255, 255, 255, 35));
 
     // Mouse circle
     sf::CircleShape spotlight(1.f);
@@ -140,79 +79,46 @@ int main() {
     sf::CircleShape boidSeen(2.f);
     boidSeen.setFillColor(sf::Color::Yellow);
 
-    sf::Clock frameClock; // Clock to measure frame time
-    sf::Clock updateClock; // Clock to measure update intervals
+    sf::Clock frameClock;
+    sf::Clock updateClock;
     float fps = 0.0f;
     while (window.isOpen()) {
         sf::Event event;
         while (window.pollEvent(event)) { if (event.type == sf::Event::Closed) window.close(); }
 
-        binLattice.clear();
-        for (auto& boid : boids) binLattice.addBoid(&boid);
-
         window.clear();
 
-        // Display lattice grid with clear gray lines
-        #ifdef SHOW_GRID
-
-
-        for (size_t i = 0; i < NUMBER_BINS; ++i) {
-            for (size_t j = 0; j < NUMBER_BINS; ++j) {
-                hline.setPosition(i * WINDOW_WIDTH / NUMBER_BINS, j * WINDOW_HEIGHT / NUMBER_BINS);
-                window.draw(hline);
-                vline.setPosition(i * WINDOW_WIDTH / NUMBER_BINS, j * WINDOW_HEIGHT / NUMBER_BINS);
-                window.draw(vline);
-            }
-        }
-        #endif
-
-        // Get Mouse Position
         sf::Vector2i mousePosition = sf::Mouse::getPosition(window);
         sf::Vector2f mousePositionFloat = sf::Vector2f(mousePosition.x, mousePosition.y);
 
         // Draw clear alpha circle around mouse
-        spotlight.setPosition(mousePositionFloat.x - RADIUS, mousePositionFloat.y - RADIUS);
+        spotlight.setPosition(mousePositionFloat - sf::Vector2f(RADIUS, RADIUS));
         window.draw(spotlight);
 
-        for (auto& boid : boids) {
-            boidShape.setPosition(boid.position);
+        for (auto const& boid : rtree) {
+            boidShape.setPosition(boid.toVec2());
             window.draw(boidShape);
         }
 
-        binLattice.clear();
-        for (auto& boid : boids) binLattice.addBoid(&boid);
-
-        #if 1 // For each boid (real usecase), very slow < 10 FPS
-        // *********** SLOW ***********
-        for (auto& boid : boids) {
-            binLattice.query(mousePositionFloat, result, RADIUS);
-            for (size_t i = 0; i < result.second; ++i) {
-                boidSeen.setPosition(result.first[i]->position);
-                window.draw(boidSeen);
-            }
-        }
-        // *********** /SLOW ***********
-        #else // Only for mouse position (for profiling): very fast > 120 FPS
-        binLattice.query(mousePositionFloat, result, RADIUS);
-        for (size_t i = 0; i < result.second; ++i) {
-            boidSeen.setPosition(result.first[i]->position);
+        for (Boid const & boid : intersecting(point_2d(mousePosition.x, mousePosition.y), rtree, RADIUS)) {
+            boidSeen.setPosition(boid.toVec2());
             window.draw(boidSeen);
         }
-        #endif
 
+        // Calculate FPS
         sf::Time frameTime = frameClock.restart();
         if (updateClock.getElapsedTime().asSeconds() >= 0.5) {
-            // Update FPS every 0.5 seconds
             fps = 1.0f / frameTime.asSeconds();
             updateClock.restart();
         }
 
-        // Update text
-        std::stringstream ss;
-        ss << std::fixed << std::setprecision(2) << fps << " FPS";
-        text.setString(ss.str());
-        window.draw(text);
-
+        // Display FPS
+        {
+            std::stringstream ss;
+            ss << std::fixed << std::setprecision(2) << fps << " FPS";
+            text.setString(ss.str());
+            window.draw(text);
+        }
         window.display();
     }
 }
