@@ -1,3 +1,4 @@
 analysis.txt
 *.out
 myapp
+build/
