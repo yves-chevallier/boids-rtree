@@ -33,7 +33,7 @@
 int main() {
     sf::RenderWindow window(sf::VideoMode(1000, 1000), "Spatial Tree", sf::Style::Close);
 
-    Collection<Body> tree;
+    RTree<Body> tree;
 
     for (int i = 0; i < N; ++i) {
         const auto x = static_cast<float>(rand() % WINDOW_WIDTH);

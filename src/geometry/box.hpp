@@ -98,6 +98,23 @@ class Box {
     vector_type bottomLeft() const { return vector_type(left, bottom()); }
     vector_type bottomRight() const { return vector_type(right(), bottom()); }
 
+    Box<T> merge(const Box<T>& box) const
+    {
+        const T newLeft = std::min(left, box.left);
+        const T newTop = std::min(top, box.top);
+        const T newWidth = std::max(right(), box.right()) - newLeft;
+        const T newHeight = std::max(bottom(), box.bottom()) - newTop;
+        return Box<T>(newLeft, newTop, newWidth, newHeight);
+    }
+    Box<T> merge(const vector_type& point) const
+    {
+        const T newLeft = std::min(left, point.x);
+        const T newTop = std::min(top, point.y);
+        const T newWidth = std::max(right(), point.x) - newLeft;
+        const T newHeight = std::max(bottom(), point.y) - newTop;
+        return Box<T>(newLeft, newTop, newWidth, newHeight);
+    }
+
     bool contains(T x, T y) const
     {
         const T minX = std::min(left, static_cast<T>(left + width));
