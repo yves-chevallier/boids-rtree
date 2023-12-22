@@ -1,10 +1,10 @@
 {
     "C_Cpp.default.includePath": [
-        "${workspaceFolder}",
+        "${workspaceFolder}/src",
         "${workspaceFolder}/build/vcpkg_installed/x64-linux/include"
     ],
     "C_Cpp.default.browse.path": [
-        "${workspaceFolder}",
+        "${workspaceFolder}/src",
         "${workspaceFolder}/build/vcpkg_installed/x64-linux/include"
     ],
     "cmake.configureOnOpen": true,

@@ -15,7 +15,7 @@ endif()
 find_package(Boost 1.83.0 REQUIRED)
 find_package(SFML 2.6.1 REQUIRED COMPONENTS graphics window system)
 
-file(GLOB SOURCES "*.cpp")
+file(GLOB_RECURSE SOURCES "src/*.cpp")
 file(GLOB ASSETS "assets/*")
 file(COPY ${ASSETS} DESTINATION ${CMAKE_BINARY_DIR}/assets)
 
@@ -31,7 +31,7 @@ endforeach()
 add_executable(app ${SOURCES} ${ASSETS})
 source_group("Assets" FILES ${ASSETS})
 
-target_include_directories(app PRIVATE src)
+target_include_directories(app PRIVATE src/)
 target_link_libraries(app ${Boost_LIBRARIES} sfml-graphics sfml-window sfml-system ${FREETYPE})
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
