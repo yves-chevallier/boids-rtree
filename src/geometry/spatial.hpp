@@ -4,6 +4,32 @@
 #include "geometry/vector2.hpp"
 
 #include <vector>
+#include <concepts>
+
+template<typename T>
+concept Predicate = requires(T t, const Vector2f& v) {
+    { t(v) } -> std::convertible_to<bool>;
+};
+
+template <typename T>
+struct Contains {
+    Contains(Boxf const& box) : box(box) {}
+    Contains(Vector2f const& point, auto radius) : box(point, radius+radius) {}
+    bool operator()(T const& el) const {
+        return box.contains(el.position);
+    }
+    Boxf box;
+};
+
+template <typename T>
+struct Distance {
+    Distance(Vector2f const& search, float radius) : search(search), radius(radius) {}
+    bool operator()(T const& el) const {
+        return (el.position - search).lengthSquared() < radius * radius;
+    }
+    Vector2f search;
+    float radius;
+};
 
 template <typename T>
 class Collection {
@@ -57,6 +83,19 @@ class Collection {
         size_type count = 0;
         for (auto &element : elements) {
             if (range.contains(element.position)) {
+                if (count++ >= maxClosest) break;
+                result.push_back(element);
+            }
+        }
+        return result;
+    }
+
+    template <Predicate Pred>
+    query_type query(Pred pred, size_t maxClosest=max_size_type::max()) const {
+        query_type result;
+        size_type count = 0;
+        for (auto &element : elements) {
+            if (pred(element)) {
                 if (count++ >= maxClosest) break;
                 result.push_back(element);
             }

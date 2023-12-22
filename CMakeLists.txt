@@ -31,7 +31,7 @@ endforeach()
 add_executable(app ${SOURCES} ${ASSETS})
 source_group("Assets" FILES ${ASSETS})
 
-target_include_directories(app PRIVATE src/)
+target_include_directories(app PRIVATE src)
 target_link_libraries(app ${Boost_LIBRARIES} sfml-graphics sfml-window sfml-system ${FREETYPE})
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")

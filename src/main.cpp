@@ -18,8 +18,8 @@
 #define WINDOW_WIDTH 1000
 #define WINDOW_HEIGHT 1000
 
-#define N 1000
-#define RADIUS 50 // Radius of the circle around the mouse to query for neighbors
+#define N 10000
+#define RADIUS 100 // Radius of the circle around the mouse to query for neighbors
 
 // struct Boid {
 //     point_2d position;
@@ -85,15 +85,15 @@ int main() {
         spotlight.setPosition(mousePositionFloat - sf::Vector2f(RADIUS, RADIUS));
         window.draw(spotlight);
 
-        // for (auto const& body : tree) {
-        //     bodyShape.setPosition(body.position);
-        //     window.draw(bodyShape);
-        // }
+        for (auto const& body : tree) {
+            bodyShape.setPosition(body.position);
+            window.draw(bodyShape);
+        }
 
-        // for (Body const & body : tree.query(mousePositionFloat, RADIUS)) {
-        //     bodySeen.setPosition(body.position);
-        //     window.draw(bodySeen);
-        // }
+        for (Body const & body : tree.query(Distance<Body>(Vector2f(mousePositionFloat), RADIUS))) {
+            bodySeen.setPosition(body.position);
+            window.draw(bodySeen);
+        }
 
         window.draw(text);
         window.display();

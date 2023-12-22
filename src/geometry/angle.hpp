@@ -5,7 +5,7 @@
 
 class Angle {
 public:
-    static constexpr double pi = std::numbers::pi;
+    static constexpr double pi = std::numbers::pi_v<double>;
     Angle(double radians = 0.0) : radians(normalizeRadians(radians)) {}
 
     void setRadians(double radians) { this->radians = normalizeRadians(radians); }
