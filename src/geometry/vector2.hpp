@@ -270,3 +270,7 @@ private:
 using Vector2f = Vector2<float>;
 using Vector2i = Vector2<int>;
 using Vector2u = Vector2<unsigned int>;
+
+using float2 = Vector2<float>;
+using int2 = Vector2<int>;
+using uint2 = Vector2<unsigned int>;

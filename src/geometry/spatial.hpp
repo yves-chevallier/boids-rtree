@@ -1,9 +1,11 @@
 #pragma once
 
 #include <concepts>
-#include <vector>
-#include <iterator>
 #include <functional>
+#include <iterator>
+#include <vector>
+#include <algorithm>
+#include <random>
 
 #include "geometry/box.hpp"
 #include "geometry/vector2.hpp"
@@ -159,16 +161,23 @@ struct access<Vector2f, Dimension> {
 }  // namespace geometry
 }  // namespace boost
 
-template<typename T, typename RTreeIterator>
+template <typename T, typename RTreeIterator>
 class RTreeIteratorAdapter : public std::iterator<std::input_iterator_tag, T> {
 public:
     RTreeIteratorAdapter(RTreeIterator it) : it_(it) {}
 
     T& operator*() const { return *it_; }
-    RTreeIteratorAdapter& operator++() { ++it_; return *this; }
+    RTreeIteratorAdapter& operator++() {
+        ++it_;
+        return *this;
+    }
 
-    bool operator==(const RTreeIteratorAdapter& other) const { return it_ == other.it_; }
-    bool operator!=(const RTreeIteratorAdapter& other) const { return it_ != other.it_; }
+    bool operator==(const RTreeIteratorAdapter& other) const {
+        return it_ == other.it_;
+    }
+    bool operator!=(const RTreeIteratorAdapter& other) const {
+        return it_ != other.it_;
+    }
 
 private:
     RTreeIterator it_;
@@ -216,4 +225,146 @@ public:
 
 protected:
     tree_type rtree;
+};
+
+// ---------------------------------------------------------------------------
+
+template <typename T>
+class SpatialHashing{
+public:
+    using value_type = T;
+    using bounds_type = Boxf;
+    using const_iterator = typename std::vector<T>::const_iterator;
+    using const_query_iterator = typename std::vector<T>::const_iterator;
+
+    using size_type = typename std::vector<T>::size_type;
+    using max_size_type = typename std::numeric_limits<size_type>;
+    using query_type = std::vector<std::reference_wrapper<T const>>;
+
+    SpatialHashing(uint width, uint height) : box(0, 0, width, height) {
+        width = width;
+        cellSize = width / 20;
+        pivots.resize(width * height / cellSize);
+        hashtable.resize(width * height);
+    }
+
+    void insert(const T& data) {
+        elements.push_back(data);
+
+        updateBounds(data);
+    }
+
+    void clear() { elements.clear(); }
+
+    void update() {
+        // Get usage, store on pivot the cell usage
+        std::fill(pivots.begin(), pivots.end(), 0);
+        for (const auto &element : elements) {
+            int2 coord = getCellCoordinates(element.position);
+            for (auto &nh : neighbourhood) {
+                if (coord.x + nh.x < 0 || coord.x + nh.x >= box.width / cellSize ||
+                    coord.y + nh.y < 0 || coord.y + nh.y >= box.height / cellSize)
+                    continue;
+                pivots[getCellIndex(coord + nh)]++;
+            }
+        }
+
+        // Get start index in hashtable for each cell
+        size_t start = 0;
+        for (auto &pivot : pivots) {
+            size_type usage = pivot;
+            pivot = start;
+            start += usage;
+        }
+
+        // Optionnaly shuffle the elements to get neighbour in random order
+        shuffler.resize(elements.size());
+        for (size_type i = 0; i < elements.size(); ++i) shuffler[i] = i;
+        std::random_device rd;
+        std::default_random_engine gen(rd()); // Utilisation du générateur par défaut
+
+        std::shuffle(shuffler.begin(), shuffler.end(), gen);
+
+        // Fill hashtable
+        size_t i = 0;
+        hashtable.clear();
+        hashtable.resize(elements.size());
+        for (auto &element : elements) {
+            auto coord = getCellCoordinates(element.position);
+            for (auto const &nh : neighbourhood) { // Diffuse elements to surrounding cells
+                if (coord.x + nh.x < 0 || coord.x + nh.x >= box.width / cellSize ||
+                    coord.y + nh.y < 0 || coord.y + nh.y >= box.height / cellSize)
+                    continue;
+                hashtable[pivots[getCellIndex(coord + nh)]++] = i;
+            }
+            ++i;
+        }
+
+        // Reposition start index in the correct place
+        for (size_type i = 1; i < pivots.size(); ++i) {
+            pivots[i] = pivots[i - 1];
+        }
+    }
+
+    size_type size() const { return elements.size(); }
+    const_iterator begin() const { return elements.begin(); }
+    const_iterator end() const { return elements.end(); }
+    // const_iterator cbegin() const { return elements.cbegin(); }
+    // const_iterator cend() const { return elements.cend(); }
+
+    bounds_type bounds() const { return box; }
+    query_type query(const T &element, const std::function<bool(const T&)>& pred,
+                     size_t maxClosest = max_size_type::max()) const {
+        query_type result;
+        size_type count = 0;
+        auto pivot_index = getCellIndex(getCellCoordinates(element.position));
+        auto start = pivots[pivot_index];
+        auto end = pivots[pivot_index + 1];
+        for (size_type i = start; i < end; i++) {
+            if (count++ >= maxClosest) break;
+            if (pred(elements[hashtable[i]]))
+                result.push_back(elements[hashtable[i]]);
+        }
+        return result;
+    }
+
+    auto begin() { return elements.begin(); }
+    auto end() { return elements.end(); }
+    // auto cbegin() const { return elements.cbegin(); }
+    // auto cend() const { return elements.cend(); }
+
+protected:
+
+
+    void updateBounds(T el) { box = box.merge(el.position); }
+
+    size_t keyFromHash(size_t hash) const { return hash % cellSize; }
+
+    int2 getCellCoordinates(float2 const pos) const {
+        return int2(std::floor(pos.x / cellSize), std::floor(pos.y / cellSize));
+    }
+
+    size_t getCellIndex(int2 coord) const {
+        return coord.x * box.width / cellSize + coord.y;
+    }
+
+    size_t hash(int2 coord) const {
+        //const int2 prime = float2(73856093, 19349663);
+        const int2 prime(15823, 9737333);
+        return static_cast<uint>(coord.x * prime.x) ^ static_cast<uint>(coord.y * prime.y);
+    }
+
+    std::array<int2, 9> neighbourhood = {
+        int2(-1, -1), int2(0, -1), int2(1, -1),
+        int2(-1, 0), int2(0, 0), int2(1, 0),
+        int2(-1, 1), int2(0, 1), int2(1, 1),
+    };
+
+    uint cellSize = 100;
+    uint width = 1000;
+    bounds_type box;
+    std::vector<T> elements;
+    std::vector<size_type> shuffler;
+    std::vector<size_type> hashtable;
+    std::vector<size_type> pivots;
 };

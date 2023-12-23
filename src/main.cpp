@@ -18,7 +18,7 @@
 #define WINDOW_WIDTH 1000
 #define WINDOW_HEIGHT 1000
 
-#define N 10000
+#define N 100
 #define RADIUS 100 // Radius of the circle around the mouse to query for neighbors
 
 // struct Boid {
@@ -33,17 +33,19 @@
 int main() {
     sf::RenderWindow window(sf::VideoMode(1000, 1000), "Spatial Tree", sf::Style::Close);
 
-    RTree<Body> tree;
+    SpatialHashing<Body> tree(WINDOW_WIDTH, WINDOW_HEIGHT);
 
     for (int i = 0; i < N; ++i) {
         const auto x = static_cast<float>(rand() % WINDOW_WIDTH);
         const auto y = static_cast<float>(rand() % WINDOW_HEIGHT);
         tree.insert(Body(Vector2f(x, y)));
     }
+    tree.update();
+
 
     // Load a font
     sf::Font font;
-    if (!font.loadFromFile("collegiate.ttf")) std::cout << "Error loading font" << std::endl;
+    if (!font.loadFromFile("assets/collegiate.ttf")) std::cout << "Error loading font" << std::endl;
 
     // Setup text
     sf::Text text("", font);
@@ -79,7 +81,7 @@ int main() {
         window.clear();
 
         sf::Vector2i mousePosition = sf::Mouse::getPosition(window);
-        sf::Vector2f mousePositionFloat = sf::Vector2f(mousePosition.x, mousePosition.y);
+        float2 mousePositionFloat = float2(mousePosition.x, mousePosition.y);
 
         // Draw clear alpha circle around mouse
         spotlight.setPosition(mousePositionFloat - sf::Vector2f(RADIUS, RADIUS));
@@ -90,7 +92,7 @@ int main() {
             window.draw(bodyShape);
         }
 
-        for (Body const & body : tree.query(Distance<Body>(Vector2f(mousePositionFloat), RADIUS))) {
+        for (Body const & body : tree.query(mousePositionFloat, Distance<Body>(mousePositionFloat, RADIUS))) {
             bodySeen.setPosition(body.position);
             window.draw(bodySeen);
         }
