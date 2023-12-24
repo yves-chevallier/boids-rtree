@@ -19,7 +19,7 @@
 #define WINDOW_WIDTH 1000
 #define WINDOW_HEIGHT 1000
 
-#define N 10000
+#define N 50000
 #define RADIUS 50 // Radius of the circle around the mouse to query for neighbors
 
 // struct Boid {
@@ -34,7 +34,8 @@
 int main() {
     sf::RenderWindow window(sf::VideoMode(1000, 1000), "Spatial Tree", sf::Style::Close);
     window.setFramerateLimit(600);
-    SpatialHashing<Body> tree(WINDOW_WIDTH, WINDOW_HEIGHT);
+    //SpatialHashing<Body> tree(WINDOW_WIDTH, WINDOW_HEIGHT);
+    SpatialHashingInfinite<Body> tree(RADIUS);
 
     for (int i = 0; i < N; ++i) {
         const auto x = static_cast<float>(rand() % WINDOW_WIDTH);
@@ -77,6 +78,8 @@ int main() {
     });
 
     sf::VertexArray points(sf::Points);
+    sf::Color color = sf::Color::Cyan;
+    color.a = 100;
 
     while (window.isOpen()) {
         sf::Event event;
@@ -93,7 +96,11 @@ int main() {
 
         points.clear();
         for (auto const& body : tree) {
-            points.append(sf::Vertex(body.position, sf::Color::Cyan));
+            points.append(sf::Vertex(body.position, color));
+        }
+
+        for (Body const & body : tree.query(mousePositionFloat, PassThrough<Body>())) {
+            points.append(sf::Vertex(body.position, sf::Color::Magenta));
         }
 
         for (Body const & body : tree.query(mousePositionFloat, Distance<Body>(mousePositionFloat, RADIUS))) {
