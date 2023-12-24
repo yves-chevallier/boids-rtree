@@ -7,6 +7,7 @@
  * Goal is to have a 60 FPS simulation with 10000 boids.
  */
 #include <SFML/Graphics.hpp>
+#include <SFML/OpenGL.hpp>
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -19,7 +20,7 @@
 #define WINDOW_HEIGHT 1000
 
 #define N 10000
-#define RADIUS 100 // Radius of the circle around the mouse to query for neighbors
+#define RADIUS 50 // Radius of the circle around the mouse to query for neighbors
 
 // struct Boid {
 //     point_2d position;
@@ -32,7 +33,7 @@
 
 int main() {
     sf::RenderWindow window(sf::VideoMode(1000, 1000), "Spatial Tree", sf::Style::Close);
-
+    window.setFramerateLimit(600);
     SpatialHashing<Body> tree(WINDOW_WIDTH, WINDOW_HEIGHT);
 
     for (int i = 0; i < N; ++i) {
@@ -42,10 +43,11 @@ int main() {
     }
     tree.update();
 
-
     // Load a font
     sf::Font font;
     if (!font.loadFromFile("assets/collegiate.ttf")) std::cout << "Error loading font" << std::endl;
+
+    glPointSize(2.0f); // Définit la taille des points à 5.0
 
     // Setup text
     sf::Text text("", font);
@@ -74,6 +76,8 @@ int main() {
         text.setString(ss.str());
     });
 
+    sf::VertexArray points(sf::Points);
+
     while (window.isOpen()) {
         sf::Event event;
         while (window.pollEvent(event)) { if (event.type == sf::Event::Closed) window.close(); }
@@ -87,17 +91,17 @@ int main() {
         spotlight.setPosition(mousePositionFloat - sf::Vector2f(RADIUS, RADIUS));
         window.draw(spotlight);
 
+        points.clear();
         for (auto const& body : tree) {
-            bodyShape.setPosition(body.position);
-            window.draw(bodyShape);
+            points.append(sf::Vertex(body.position, sf::Color::Cyan));
         }
 
-        for (Body const & body : tree.query(mousePositionFloat, PassThrough<Body>())) {
-        //for (Body const & body : tree.query(mousePositionFloat, Distance<Body>(mousePositionFloat, RADIUS))) {
-            bodySeen.setPosition(body.position);
-            window.draw(bodySeen);
+        for (Body const & body : tree.query(mousePositionFloat, Distance<Body>(mousePositionFloat, RADIUS))) {
+            points.append(sf::Vertex(body.position, sf::Color::Yellow));
         }
+        tree.update();
 
+        window.draw(points);
         window.draw(text);
         window.display();
         fpsCounter.update();

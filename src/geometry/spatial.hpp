@@ -6,6 +6,7 @@
 #include <vector>
 #include <algorithm>
 #include <random>
+#include <coroutine>
 
 #include "geometry/box.hpp"
 #include "geometry/vector2.hpp"
@@ -331,14 +332,22 @@ public:
                      size_t maxClosest = max_size_type::max()) const {
         query_type result;
         size_type count = 0;
-        auto pivot_index = getCellIndex(getCellCoordinates(element.position));
-        auto start = pivots[pivot_index];
-        auto end = pivots[pivot_index + 1];
-        for (size_type i = start; i < end; i++) {
-            if (count++ >= maxClosest) break;
-            if (pred(elements[hashtable[i]]))
-                result.push_back(elements[hashtable[i]]);
+        auto cell = getCellCoordinates(element.position);
+        for (auto const &nh : neighbourhood) {
+            if (cell.x + nh.x < 0 || cell.x + nh.x >= box.width / cellSize ||
+                cell.y + nh.y < 0 || cell.y + nh.y >= box.height / cellSize)
+                continue;
+            auto pivot_index = getCellIndex(cell + nh);
+            auto start = pivots[pivot_index];
+            auto end = pivots[pivot_index + 1];
+            for (size_type i = start; i < end; i++) {
+                if (pred(elements[hashtable[i]])) {
+                    if (count++ >= maxClosest) break;
+                    result.push_back(elements[hashtable[i]]);
+                }
+            }
         }
+
         return result;
     }
 
