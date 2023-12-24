@@ -18,7 +18,7 @@
 #define WINDOW_WIDTH 1000
 #define WINDOW_HEIGHT 1000
 
-#define N 100
+#define N 10000
 #define RADIUS 100 // Radius of the circle around the mouse to query for neighbors
 
 // struct Boid {
@@ -92,7 +92,8 @@ int main() {
             window.draw(bodyShape);
         }
 
-        for (Body const & body : tree.query(mousePositionFloat, Distance<Body>(mousePositionFloat, RADIUS))) {
+        for (Body const & body : tree.query(mousePositionFloat, PassThrough<Body>())) {
+        //for (Body const & body : tree.query(mousePositionFloat, Distance<Body>(mousePositionFloat, RADIUS))) {
             bodySeen.setPosition(body.position);
             window.draw(bodySeen);
         }

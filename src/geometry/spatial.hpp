@@ -63,6 +63,12 @@ struct Distance {
 };
 
 template <typename T>
+struct PassThrough {
+    PassThrough() {}
+    bool operator()(T const& el) const { return true;  }
+};
+
+template <typename T>
 class Collection : public SpatialCollection<T> {
 public:
     using value_type = T;
@@ -242,10 +248,9 @@ public:
     using query_type = std::vector<std::reference_wrapper<T const>>;
 
     SpatialHashing(uint width, uint height) : box(0, 0, width, height) {
-        width = width;
-        cellSize = width / 20;
-        pivots.resize(width * height / cellSize);
-        hashtable.resize(width * height);
+        // cellSize = width / 20;
+        // pivots.resize(width * height / cellSize);
+        // hashtable.resize(width * height);
     }
 
     void insert(const T& data) {
@@ -258,15 +263,19 @@ public:
 
     void update() {
         // Get usage, store on pivot the cell usage
-        std::fill(pivots.begin(), pivots.end(), 0);
+        pivots.clear();
+        for (int i = 0; i < pivotTableSize; ++i) pivots.push_back(0);
+
         for (const auto &element : elements) {
             int2 coord = getCellCoordinates(element.position);
-            for (auto &nh : neighbourhood) {
-                if (coord.x + nh.x < 0 || coord.x + nh.x >= box.width / cellSize ||
-                    coord.y + nh.y < 0 || coord.y + nh.y >= box.height / cellSize)
-                    continue;
+            // for (auto &nh : neighbourhood) {
+            //     if (coord.x + nh.x < 0 || coord.x + nh.x >= box.width / cellSize ||
+            //         coord.y + nh.y < 0 || coord.y + nh.y >= box.height / cellSize)
+            //         continue;
+            auto nh = int2(0, 0);
                 pivots[getCellIndex(coord + nh)]++;
-            }
+                //std::cout << "Cell " << getCellIndex(coord + nh) << " has " << pivots[getCellIndex(coord + nh)] << " elements\n";
+            // }
         }
 
         // Get start index in hashtable for each cell
@@ -288,22 +297,27 @@ public:
         // Fill hashtable
         size_t i = 0;
         hashtable.clear();
-        hashtable.resize(elements.size());
+        for (int i = 0; i < elements.size(); ++i) hashtable.push_back(0);
+
         for (auto &element : elements) {
             auto coord = getCellCoordinates(element.position);
-            for (auto const &nh : neighbourhood) { // Diffuse elements to surrounding cells
-                if (coord.x + nh.x < 0 || coord.x + nh.x >= box.width / cellSize ||
-                    coord.y + nh.y < 0 || coord.y + nh.y >= box.height / cellSize)
-                    continue;
-                hashtable[pivots[getCellIndex(coord + nh)]++] = i;
-            }
+            // for (auto const &nh : neighbourhood) { // Diffuse elements to surrounding cells
+            //     if (coord.x + nh.x < 0 || coord.x + nh.x >= box.width / cellSize ||
+            //         coord.y + nh.y < 0 || coord.y + nh.y >= box.height / cellSize)
+            //         continue;
+            auto nh = int2(0, 0);
+                auto index = pivots[getCellIndex(coord + nh)]++;
+                hashtable[index] = i;
+            // }
             ++i;
         }
 
         // Reposition start index in the correct place
-        for (size_type i = 1; i < pivots.size(); ++i) {
+        pivots.push_back(pivots.back());
+        for (int i = pivots.size() - 1; i > 0; --i) {
             pivots[i] = pivots[i - 1];
         }
+        pivots[0] = 0;
     }
 
     size_type size() const { return elements.size(); }
@@ -338,17 +352,23 @@ protected:
 
     void updateBounds(T el) { box = box.merge(el.position); }
 
-    size_t keyFromHash(size_t hash) const { return hash % cellSize; }
+    size_type keyFromHash(size_type hash) const { return hash % cellSize; }
 
     int2 getCellCoordinates(float2 const pos) const {
         return int2(std::floor(pos.x / cellSize), std::floor(pos.y / cellSize));
     }
 
-    size_t getCellIndex(int2 coord) const {
+#if 0
+    size_type getCellIndex(int2 coord) const {
         return coord.x * box.width / cellSize + coord.y;
     }
+#else
+    size_type getCellIndex(int2 coord) const {
+        return hash(coord) % pivotTableSize;
+    }
+#endif
 
-    size_t hash(int2 coord) const {
+    size_type hash(int2 coord) const {
         //const int2 prime = float2(73856093, 19349663);
         const int2 prime(15823, 9737333);
         return static_cast<uint>(coord.x * prime.x) ^ static_cast<uint>(coord.y * prime.y);
@@ -360,8 +380,9 @@ protected:
         int2(-1, 1), int2(0, 1), int2(1, 1),
     };
 
-    uint cellSize = 100;
+    uint cellSize = 50;
     uint width = 1000;
+    uint pivotTableSize = 1000;
     bounds_type box;
     std::vector<T> elements;
     std::vector<size_type> shuffler;
